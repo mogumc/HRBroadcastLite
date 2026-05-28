@@ -15,7 +15,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.util.Log
-import android.view.animation.AnimationUtils
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -324,20 +323,15 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         if (!isBroadcasting) {
             binding.heartRateText.text = getString(R.string.no_heart_rate)
             binding.heartRateText.setTextColor(ContextCompat.getColor(this, R.color.unit_text))
-            binding.heartIcon.clearAnimation()
             return
         }
         
         if (isWearing && heartRate > 0) {
             binding.heartRateText.text = heartRate.toString()
             binding.heartRateText.setTextColor(ContextCompat.getColor(this, R.color.heart_rate_text))
-            
-            val pulseAnimation = AnimationUtils.loadAnimation(this, R.anim.pulse)
-            binding.heartIcon.startAnimation(pulseAnimation)
         } else {
             binding.heartRateText.text = getString(R.string.no_heart_rate)
             binding.heartRateText.setTextColor(ContextCompat.getColor(this, R.color.unit_text))
-            binding.heartIcon.clearAnimation()
         }
     }
 
