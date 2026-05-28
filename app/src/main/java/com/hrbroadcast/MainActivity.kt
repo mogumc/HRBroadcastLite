@@ -167,17 +167,23 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             return
         }
         
-        Log.d(TAG, "startBroadcast: Bluetooth is ready, starting service with heartRate=$currentHeartRate")
+        Log.d(TAG, "startBroadcast: Bluetooth is ready, starting services with heartRate=$currentHeartRate")
         
-        val intent = Intent(this, HeartRateBleService::class.java).apply {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(Intent(this, HeartRateService::class.java))
+        } else {
+            startService(Intent(this, HeartRateService::class.java))
+        }
+        
+        val bleIntent = Intent(this, HeartRateBleService::class.java).apply {
             action = HeartRateBleService.ACTION_START_BROADCAST
             putExtra(HeartRateBleService.EXTRA_HEART_RATE, currentHeartRate)
         }
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
+            startForegroundService(bleIntent)
         } else {
-            startService(intent)
+            startService(bleIntent)
         }
         
         updateBroadcastButton()
@@ -188,17 +194,19 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun stopBroadcast() {
-        Log.d(TAG, "stopBroadcast: Stopping BLE service")
+        Log.d(TAG, "stopBroadcast: Stopping services")
         
         val intent = Intent(this, HeartRateBleService::class.java).apply {
             action = HeartRateBleService.ACTION_STOP_BROADCAST
         }
         startService(intent)
 
+        stopService(Intent(this, HeartRateService::class.java))
+
         wakeLock?.let { if (it.isHeld) it.release() }
         updateBroadcastButton()
         updateHeartRateDisplay(0, false)
-        Log.d(TAG, "stopBroadcast: Service stopped")
+        Log.d(TAG, "stopBroadcast: Services stopped")
     }
 
     private fun updateBroadcastButton() {
