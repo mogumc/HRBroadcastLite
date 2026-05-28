@@ -75,7 +75,7 @@ class HeartRateBleService : Service() {
 
     private val autoStopRunnable = Runnable {
         if (isAdvertising && connectedDevices.isEmpty()) {
-            Log.d(TAG, "Auto stop: No connections for 1 minute, stopping broadcast")
+            Log.d(TAG, "Auto stop: No connections for ${AUTO_STOP_DELAY_MS / 1000}s, stopping broadcast")
             broadcastAutoStop()
             stopAdvertising()
             stopGattServer()
@@ -136,7 +136,7 @@ class HeartRateBleService : Service() {
         broadcastStartTime = System.currentTimeMillis()
         hasReceivedConnection = false
         handler.postDelayed(autoStopRunnable, AUTO_STOP_DELAY_MS)
-        Log.d(TAG, "Auto stop timer started: 60 seconds")
+        Log.d(TAG, "Auto stop timer started: ${AUTO_STOP_DELAY_MS / 1000}s")
     }
 
     private fun stopAutoStopTimer() {
@@ -148,7 +148,7 @@ class HeartRateBleService : Service() {
         handler.removeCallbacks(autoStopRunnable)
         if (isAdvertising && connectedDevices.isEmpty()) {
             handler.postDelayed(autoStopRunnable, AUTO_STOP_DELAY_MS)
-            Log.d(TAG, "Auto stop timer reset: 60 seconds")
+            Log.d(TAG, "Auto stop timer reset: ${AUTO_STOP_DELAY_MS / 1000}s")
         }
     }
 

@@ -13,6 +13,8 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import android.widget.Toast
@@ -30,9 +32,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var currentHeartRate: Int = 0
     private var isWearing: Boolean = false
     private var lastHeartRateTime: Long = 0
-    private var isBroadcasting: Boolean = false
     private var bleStateReceiver: BleStateReceiver? = null
     private var hasBroadcastZeroHeartRate: Boolean = false
+    private val wearingCheckHandler = Handler(Looper.getMainLooper())
+    @Volatile private var isWearingCheckRunning = false
 
     companion object {
         private const val TAG = "MainActivity"
@@ -46,7 +49,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         setContentView(binding.root)
         Log.d(TAG, "onCreate: Activity created")
 
-        setupWakeLock()
         setupBroadcastButton()
         checkAndRequestPermissions()
     }
@@ -62,8 +64,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun setupBroadcastButton() {
         binding.broadcastButton.setOnClickListener {
-            Log.d(TAG, "Broadcast button clicked, isBroadcasting=$isBroadcasting")
-            if (isBroadcasting) {
+            Log.d(TAG, "Broadcast button clicked, isAdvertising=${HeartRateBleService.isAdvertising}")
+            if (HeartRateBleService.isAdvertising) {
                 stopBroadcast()
             } else {
                 checkBluetoothPermissionsAndStart()
@@ -138,6 +140,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun startBroadcast() {
         Log.d(TAG, "startBroadcast: Starting BLE service")
+        setupWakeLock()
         
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val bluetoothAdapter = bluetoothManager.adapter
@@ -173,13 +176,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             startService(intent)
         }
         
-        isBroadcasting = true
         hasBroadcastZeroHeartRate = false
         updateBroadcastButton()
         updateHeartRateDisplay(currentHeartRate, isWearing)
         
         Toast.makeText(this, R.string.broadcasting, Toast.LENGTH_SHORT).show()
-        Log.d(TAG, "startBroadcast: Service started, isBroadcasting=$isBroadcasting")
+        Log.d(TAG, "startBroadcast: Service started")
     }
 
     private fun stopBroadcast() {
@@ -189,16 +191,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             action = HeartRateBleService.ACTION_STOP_BROADCAST
         }
         startService(intent)
-        
-        isBroadcasting = false
+
+        wakeLock?.let { if (it.isHeld) it.release() }
         updateBroadcastButton()
         updateHeartRateDisplay(0, false)
         Log.d(TAG, "stopBroadcast: Service stopped")
     }
 
     private fun updateBroadcastButton() {
-        Log.d(TAG, "updateBroadcastButton: isBroadcasting=$isBroadcasting")
-        if (isBroadcasting) {
+        val advertising = HeartRateBleService.isAdvertising
+        Log.d(TAG, "updateBroadcastButton: isAdvertising=$advertising")
+        if (advertising) {
             binding.broadcastButton.text = getString(R.string.stop_broadcast)
             binding.broadcastButton.setBackgroundResource(R.drawable.btn_broadcast_stop)
         } else {
@@ -238,52 +241,48 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun registerSensorListener(): Boolean {
-        if (heartRateSensor == null) return false
-        
-        val delays = listOf(
-            SensorManager.SENSOR_DELAY_FASTEST,
-            SensorManager.SENSOR_DELAY_GAME,
-            SensorManager.SENSOR_DELAY_UI,
-            SensorManager.SENSOR_DELAY_NORMAL
-        )
-        
-        for (delay in delays) {
-            val registered = sensorManager?.registerListener(
-                this,
-                heartRateSensor,
-                delay
-            ) ?: false
-            
-            if (registered) {
-                Log.d(TAG, "registerSensorListener: Success")
-                return true
-            }
+        if (heartRateSensor == null || sensorManager == null) return false
+        val registered = sensorManager?.registerListener(
+            this, heartRateSensor, SensorManager.SENSOR_DELAY_NORMAL
+        ) ?: false
+        if (registered) {
+            Log.d(TAG, "registerSensorListener: Success")
         }
-        return false
+        return registered
     }
 
     private fun startWearingCheck() {
-        Thread {
-            while (true) {
-                Thread.sleep(5000)
-                val currentTime = System.currentTimeMillis()
-                val timeSinceLastHeartRate = currentTime - lastHeartRateTime
-                
-                if (timeSinceLastHeartRate > 5000 && isWearing) {
-                    isWearing = false
-                    runOnUiThread {
-                        if (isBroadcasting) {
-                            if (!hasBroadcastZeroHeartRate) {
-                                updateBleHeartRate(0)
-                                hasBroadcastZeroHeartRate = true
-                                Log.d(TAG, "Wearing state changed to not wearing, broadcasting heart rate 0")
-                            }
-                            updateHeartRateDisplay(0, false)
-                        }
+        if (isWearingCheckRunning) return
+        isWearingCheckRunning = true
+        wearingCheckHandler.post(wearingCheckRunnable)
+    }
+
+    private val wearingCheckRunnable = object : Runnable {
+        override fun run() {
+            if (!isWearingCheckRunning) return
+
+            val currentTime = System.currentTimeMillis()
+            val timeSinceLastHeartRate = currentTime - lastHeartRateTime
+
+            if (timeSinceLastHeartRate > 5000 && isWearing) {
+                isWearing = false
+                if (HeartRateBleService.isAdvertising) {
+                    if (!hasBroadcastZeroHeartRate) {
+                        updateBleHeartRate(0)
+                        hasBroadcastZeroHeartRate = true
+                        Log.d(TAG, "Wearing state changed to not wearing, broadcasting heart rate 0")
                     }
+                    updateHeartRateDisplay(0, false)
                 }
             }
-        }.start()
+
+            wearingCheckHandler.postDelayed(this, 5000)
+        }
+    }
+
+    private fun stopWearingCheck() {
+        isWearingCheckRunning = false
+        wearingCheckHandler.removeCallbacks(wearingCheckRunnable)
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -297,7 +296,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     hasBroadcastZeroHeartRate = false
                     lastHeartRateTime = System.currentTimeMillis()
                     
-                    if (isBroadcasting) {
+                    if (HeartRateBleService.isAdvertising) {
                         updateBleHeartRate(heartRate)
                         runOnUiThread {
                             updateHeartRateDisplay(heartRate, true)
@@ -320,7 +319,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun updateHeartRateDisplay(heartRate: Int, isWearing: Boolean) {
-        if (!isBroadcasting) {
+        if (!HeartRateBleService.isAdvertising) {
             binding.heartRateText.text = getString(R.string.no_heart_rate)
             binding.heartRateText.setTextColor(ContextCompat.getColor(this, R.color.unit_text))
             return
@@ -342,7 +341,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             == PackageManager.PERMISSION_GRANTED) {
             registerSensorListener()
         }
-        isBroadcasting = HeartRateBleService.isAdvertising
         updateBroadcastButton()
         updateHeartRateDisplay(currentHeartRate, isWearing)
         registerBleStateReceiver()
@@ -379,7 +377,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             when (intent?.action) {
                 HeartRateBleService.ACTION_AUTO_STOP -> {
                     Log.d(TAG, "Auto stop received")
-                    isBroadcasting = false
                     updateBroadcastButton()
                     updateHeartRateDisplay(0, false)
                     Toast.makeText(this@MainActivity, "无设备连接，已自动停止广播", Toast.LENGTH_SHORT).show()
@@ -390,6 +387,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopWearingCheck()
         sensorManager?.unregisterListener(this)
         wakeLock?.let {
             if (it.isHeld) {
