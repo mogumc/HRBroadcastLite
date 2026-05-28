@@ -309,11 +309,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun updateBleHeartRate(heartRate: Int) {
         Log.d(TAG, "updateBleHeartRate: $heartRate BPM")
-        val intent = Intent(this, HeartRateBleService::class.java).apply {
-            action = HeartRateBleService.ACTION_UPDATE_HEART_RATE
-            putExtra(HeartRateBleService.EXTRA_HEART_RATE, heartRate)
-        }
-        startService(intent)
+        HeartRateBleService.updateHeartRate(heartRate)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

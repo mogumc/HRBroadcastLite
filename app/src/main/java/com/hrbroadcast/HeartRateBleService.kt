@@ -56,6 +56,15 @@ class HeartRateBleService : Service() {
         
         var connectionCount = 0
             private set
+
+        private var instance: HeartRateBleService? = null
+        
+        fun updateHeartRate(heartRate: Int) {
+            instance?.let {
+                it.currentHeartRate = heartRate
+                it.notifyHeartRate()
+            }
+        }
         
         private const val AUTO_STOP_DELAY_MS = 180_000L
     }
@@ -86,6 +95,7 @@ class HeartRateBleService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         Log.d(TAG, "onCreate: Initializing BLE service")
         
         bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -121,11 +131,6 @@ class HeartRateBleService : Service() {
                 stopGattServer()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
-            }
-            ACTION_UPDATE_HEART_RATE -> {
-                currentHeartRate = intent.getIntExtra(EXTRA_HEART_RATE, 0)
-                Log.d(TAG, "ACTION_UPDATE_HEART_RATE: heartRate=$currentHeartRate, isAdvertising=$isAdvertising, gattServer=$gattServerStarted")
-                notifyHeartRate()
             }
         }
         
@@ -361,8 +366,8 @@ class HeartRateBleService : Service() {
         startForeground(NOTIFICATION_ID, createNotification())
         
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
             .setConnectable(true)
             .setTimeout(0)
             .build()
@@ -496,6 +501,7 @@ class HeartRateBleService : Service() {
         stopAutoStopTimer()
         stopAdvertising()
         stopGattServer()
+        instance = null
         Log.d(TAG, "onDestroy")
     }
 
