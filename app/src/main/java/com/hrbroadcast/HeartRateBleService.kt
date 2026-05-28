@@ -323,9 +323,10 @@ class HeartRateBleService : Service() {
             return
         }
         
+        @Suppress("DEPRECATION")
         try {
             val data = createHeartRateData(currentHeartRate)
-            heartRateCharacteristic?.value = data
+            heartRateCharacteristic?.setValue(data)
             
             val devices = bluetoothManager?.getConnectedDevices(BluetoothProfile.GATT)
             Log.d(TAG, "notifyHeartRate: Connected devices: ${devices?.size}")
