@@ -33,7 +33,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var isWearing: Boolean = false
     private var lastHeartRateTime: Long = 0
     private var bleStateReceiver: BleStateReceiver? = null
-    private var hasBroadcastZeroHeartRate: Boolean = false
     private val wearingCheckHandler = Handler(Looper.getMainLooper())
     @Volatile private var isWearingCheckRunning = false
 
@@ -176,7 +175,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             startService(intent)
         }
         
-        hasBroadcastZeroHeartRate = false
         updateBroadcastButton()
         updateHeartRateDisplay(currentHeartRate, isWearing)
         
@@ -267,11 +265,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             if (timeSinceLastHeartRate > 5000 && isWearing) {
                 isWearing = false
                 if (HeartRateBleService.isAdvertising) {
-                    if (!hasBroadcastZeroHeartRate) {
-                        updateBleHeartRate(0)
-                        hasBroadcastZeroHeartRate = true
-                        Log.d(TAG, "Wearing state changed to not wearing, broadcasting heart rate 0")
-                    }
                     updateHeartRateDisplay(0, false)
                 }
             }
@@ -293,11 +286,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 if (heartRate > 0) {
                     currentHeartRate = heartRate
                     isWearing = true
-                    hasBroadcastZeroHeartRate = false
                     lastHeartRateTime = System.currentTimeMillis()
-                    
+
                     if (HeartRateBleService.isAdvertising) {
-                        updateBleHeartRate(heartRate)
                         runOnUiThread {
                             updateHeartRateDisplay(heartRate, true)
                         }
@@ -305,11 +296,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 }
             }
         }
-    }
-
-    private fun updateBleHeartRate(heartRate: Int) {
-        Log.d(TAG, "updateBleHeartRate: $heartRate BPM")
-        HeartRateBleService.updateHeartRate(heartRate)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

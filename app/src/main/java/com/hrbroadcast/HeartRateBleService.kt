@@ -41,7 +41,6 @@ class HeartRateBleService : Service() {
         
         const val ACTION_START_BROADCAST = "com.hrbroadcast.START_BROADCAST"
         const val ACTION_STOP_BROADCAST = "com.hrbroadcast.STOP_BROADCAST"
-        const val ACTION_UPDATE_HEART_RATE = "com.hrbroadcast.UPDATE_HEART_RATE"
         const val ACTION_CONNECTION_STATE_CHANGED = "com.hrbroadcast.CONNECTION_STATE_CHANGED"
         const val ACTION_AUTO_STOP = "com.hrbroadcast.AUTO_STOP"
         const val EXTRA_HEART_RATE = "heart_rate"
@@ -79,8 +78,6 @@ class HeartRateBleService : Service() {
     private var gattServerStarted = false
     private val connectedDevices = mutableSetOf<String>()
     private val handler = Handler(Looper.getMainLooper())
-    private var broadcastStartTime: Long = 0
-    private var hasReceivedConnection: Boolean = false
 
     private val autoStopRunnable = Runnable {
         if (isAdvertising && connectedDevices.isEmpty()) {
@@ -138,8 +135,6 @@ class HeartRateBleService : Service() {
     }
 
     private fun startAutoStopTimer() {
-        broadcastStartTime = System.currentTimeMillis()
-        hasReceivedConnection = false
         handler.postDelayed(autoStopRunnable, AUTO_STOP_DELAY_MS)
         Log.d(TAG, "Auto stop timer started: ${AUTO_STOP_DELAY_MS / 1000}s")
     }
@@ -254,7 +249,6 @@ class HeartRateBleService : Service() {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.d(TAG, "Device connected: $deviceAddress")
                 connectedDevices.add(deviceAddress)
-                hasReceivedConnection = true
                 handler.removeCallbacks(autoStopRunnable)
                 broadcastConnectionState()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
