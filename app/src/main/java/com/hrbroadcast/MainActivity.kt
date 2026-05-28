@@ -64,6 +64,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun setupBroadcastButton() {
         binding.broadcastButton.setOnClickListener {
             Log.d(TAG, "Broadcast button clicked, isAdvertising=${HeartRateBleService.isAdvertising}")
+            binding.broadcastButton.isEnabled = false
             if (HeartRateBleService.isAdvertising) {
                 stopBroadcast()
             } else {
@@ -132,6 +133,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 } else {
                     Log.w(TAG, "Bluetooth permissions denied")
                     Toast.makeText(this, "需要蓝牙权限才能广播心率", Toast.LENGTH_LONG).show()
+                    updateBroadcastButton()
                 }
             }
         }
@@ -147,18 +149,21 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         if (bluetoothAdapter == null) {
             Log.e(TAG, "startBroadcast: BluetoothAdapter is null")
             Toast.makeText(this, "蓝牙不可用", Toast.LENGTH_SHORT).show()
+            updateBroadcastButton()
             return
         }
         
         if (!bluetoothAdapter.isEnabled) {
             Log.w(TAG, "startBroadcast: Bluetooth is not enabled")
             Toast.makeText(this, "请先开启蓝牙", Toast.LENGTH_SHORT).show()
+            updateBroadcastButton()
             return
         }
         
         if (bluetoothAdapter.bluetoothLeAdvertiser == null) {
             Log.e(TAG, "startBroadcast: BLE advertiser is null")
             Toast.makeText(this, R.string.ble_not_supported, Toast.LENGTH_SHORT).show()
+            updateBroadcastButton()
             return
         }
         
@@ -206,6 +211,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             binding.broadcastButton.text = getString(R.string.start_broadcast)
             binding.broadcastButton.setBackgroundResource(R.drawable.btn_broadcast)
         }
+        binding.broadcastButton.isEnabled = true
     }
 
     private fun checkAndRequestPermissions() {
