@@ -85,6 +85,7 @@ class HeartRateBleService : Service() {
             broadcastAutoStop()
             stopAdvertising()
             stopGattServer()
+            stopService(Intent(this, HeartRateService::class.java))
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }

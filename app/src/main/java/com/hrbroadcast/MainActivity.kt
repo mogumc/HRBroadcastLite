@@ -141,7 +141,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun startBroadcast() {
         Log.d(TAG, "startBroadcast: Starting BLE service")
-        setupWakeLock()
         
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val bluetoothAdapter = bluetoothManager.adapter
@@ -168,6 +167,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
         
         Log.d(TAG, "startBroadcast: Bluetooth is ready, starting services with heartRate=$currentHeartRate")
+        
+        setupWakeLock()
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(Intent(this, HeartRateService::class.java))
@@ -371,6 +372,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             when (intent?.action) {
                 HeartRateBleService.ACTION_AUTO_STOP -> {
                     Log.d(TAG, "Auto stop received")
+                    stopService(Intent(this@MainActivity, HeartRateService::class.java))
+                    wakeLock?.let { if (it.isHeld) it.release() }
                     updateBroadcastButton()
                     updateHeartRateDisplay(0, false)
                     Toast.makeText(this@MainActivity, "无设备连接，已自动停止广播", Toast.LENGTH_SHORT).show()
