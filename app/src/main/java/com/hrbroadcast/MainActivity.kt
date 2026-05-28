@@ -289,9 +289,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     lastHeartRateTime = System.currentTimeMillis()
 
                     if (HeartRateBleService.isAdvertising) {
-                        runOnUiThread {
-                            updateHeartRateDisplay(heartRate, true)
-                        }
+                        updateHeartRateDisplay(heartRate, true)
                     }
                 }
             }
