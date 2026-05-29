@@ -28,6 +28,9 @@ class HeartRateService : LifecycleService(), SensorEventListener {
         const val CHANNEL_ID = "heart_rate_channel"
         const val NOTIFICATION_ID = 1001
         private const val BLE_UPDATE_INTERVAL_MS = 500L
+        const val ACTION_HEART_RATE_UPDATED = "com.hrbroadcast.HEART_RATE_UPDATED"
+        const val EXTRA_HEART_RATE_VALUE = "heart_rate_value"
+        const val EXTRA_IS_WEARING = "is_wearing"
 
         var isRunning = false
             private set
@@ -140,6 +143,7 @@ class HeartRateService : LifecycleService(), SensorEventListener {
                     currentHeartRate = heartRate
                     hasBroadcastZeroHeartRate = false
                     lastHeartRateTime = System.currentTimeMillis()
+                    broadcastHeartRate(heartRate, true)
 
                     if (HeartRateBleService.isAdvertising) {
                         val now = System.currentTimeMillis()
@@ -159,6 +163,16 @@ class HeartRateService : LifecycleService(), SensorEventListener {
         handler.post(wearingCheckRunnable)
     }
 
+    private fun broadcastHeartRate(heartRate: Int, isWearing: Boolean) {
+        val intent = Intent(ACTION_HEART_RATE_UPDATED).apply {
+            putExtra(EXTRA_HEART_RATE_VALUE, heartRate)
+            putExtra(EXTRA_IS_WEARING, isWearing)
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
+        Log.d(TAG, "broadcastHeartRate: hr=$heartRate, wearing=$isWearing")
+    }
+
     private val wearingCheckRunnable = object : Runnable {
         override fun run() {
             if (!isRunning) return
@@ -167,6 +181,7 @@ class HeartRateService : LifecycleService(), SensorEventListener {
                 if (HeartRateBleService.isAdvertising && !hasBroadcastZeroHeartRate) {
                     HeartRateBleService.updateHeartRate(0)
                     hasBroadcastZeroHeartRate = true
+                    broadcastHeartRate(0, true)
                     Log.d(TAG, "Wearing check: broadcasting heart rate 0")
                 }
             }

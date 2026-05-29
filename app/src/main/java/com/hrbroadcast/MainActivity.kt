@@ -7,14 +7,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -22,31 +16,43 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.hrbroadcast.databinding.ActivityMainBinding
 
-class MainActivity : AppCompatActivity(), SensorEventListener {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private var sensorManager: SensorManager? = null
-    private var heartRateSensor: Sensor? = null
-    private var currentHeartRate: Int = 0
-    private var isWearing: Boolean = false
-    private var lastHeartRateTime: Long = 0
-    private val wearingCheckHandler = Handler(Looper.getMainLooper())
-    @Volatile private var isWearingCheckRunning = false
+    private var localHeartRate: Int = 0
+    private var localIsWearing: Boolean = false
 
+    companion object {
+        private const val TAG = "MainActivity"
+        private const val BLUETOOTH_PERMISSION_REQUEST_CODE = 1002
+    }
+
+    // 广播按钮状态更新
     private val advertisingReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == HeartRateBleService.ACTION_ADVERTISING_STATE_CHANGED) {
                 val isAdvertising = intent.getBooleanExtra(HeartRateBleService.EXTRA_IS_ADVERTISING, false)
                 Log.d(TAG, "advertisingReceiver: isAdvertising=$isAdvertising")
                 updateBroadcastButton()
+                updateHeartRateDisplay()
             }
         }
     }
 
-    companion object {
-        private const val TAG = "MainActivity"
-        private const val PERMISSION_REQUEST_CODE = 1001
-        private const val BLUETOOTH_PERMISSION_REQUEST_CODE = 1002
+    // 心率数据更新（来自 HeartRateService）
+    private val heartRateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == HeartRateService.ACTION_HEART_RATE_UPDATED) {
+                val hr = intent.getIntExtra(HeartRateService.EXTRA_HEART_RATE_VALUE, 0)
+                val wearing = intent.getBooleanExtra(HeartRateService.EXTRA_IS_WEARING, false)
+                localHeartRate = hr
+                localIsWearing = wearing
+                Log.d(TAG, "heartRateReceiver: hr=$hr, wearing=$wearing")
+                if (HeartRateBleService.isAdvertising) {
+                    updateHeartRateDisplay()
+                }
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -54,9 +60,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         Log.d(TAG, "onCreate: Activity created")
-
         setupBroadcastButton()
-        checkAndRequestPermissions()
     }
 
     private fun setupBroadcastButton() {
@@ -74,10 +78,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun checkBluetoothPermissionsAndStart() {
         Log.d(TAG, "checkBluetoothPermissionsAndStart: SDK=${Build.VERSION.SDK_INT}")
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val permissions = mutableListOf<String>()
-            
+
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE)
                 != PackageManager.PERMISSION_GRANTED) {
                 permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
@@ -88,7 +92,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
                 Log.d(TAG, "BLUETOOTH_CONNECT permission not granted")
             }
-            
+
             if (permissions.isNotEmpty()) {
                 Log.d(TAG, "Requesting permissions: $permissions")
                 ActivityCompat.requestPermissions(
@@ -113,17 +117,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         Log.d(TAG, "onRequestPermissionsResult: requestCode=$requestCode, grantResults=${grantResults.contentToString()}")
-        
+
         when (requestCode) {
-            PERMISSION_REQUEST_CODE -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    Log.d(TAG, "Body sensors permission granted")
-                    setupHeartRateSensor()
-                } else {
-                    Log.w(TAG, "Body sensors permission denied")
-                    Toast.makeText(this, "需要身体传感器权限才能测量心率", Toast.LENGTH_LONG).show()
-                }
-            }
             BLUETOOTH_PERMISSION_REQUEST_CODE -> {
                 if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
                     Log.d(TAG, "Bluetooth permissions granted")
@@ -139,62 +134,62 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun startBroadcast() {
         Log.d(TAG, "startBroadcast: Starting BLE service")
-        
+
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val bluetoothAdapter = bluetoothManager.adapter
-        
+
         if (bluetoothAdapter == null) {
             Log.e(TAG, "startBroadcast: BluetoothAdapter is null")
             Toast.makeText(this, "蓝牙不可用", Toast.LENGTH_SHORT).show()
             updateBroadcastButton()
             return
         }
-        
+
         if (!bluetoothAdapter.isEnabled) {
             Log.w(TAG, "startBroadcast: Bluetooth is not enabled")
             Toast.makeText(this, "请先开启蓝牙", Toast.LENGTH_SHORT).show()
             updateBroadcastButton()
             return
         }
-        
+
         if (bluetoothAdapter.bluetoothLeAdvertiser == null) {
             Log.e(TAG, "startBroadcast: BLE advertiser is null")
             Toast.makeText(this, R.string.ble_not_supported, Toast.LENGTH_SHORT).show()
             updateBroadcastButton()
             return
         }
-        
-        Log.d(TAG, "startBroadcast: Bluetooth is ready, starting services with heartRate=$currentHeartRate")
-        
+
+        Log.d(TAG, "startBroadcast: Bluetooth is ready, starting services with heartRate=${HeartRateService.currentHeartRate}")
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(Intent(this, HeartRateService::class.java))
         } else {
             startService(Intent(this, HeartRateService::class.java))
         }
-        
+
         val bleIntent = Intent(this, HeartRateBleService::class.java).apply {
             action = HeartRateBleService.ACTION_START_BROADCAST
-            putExtra(HeartRateBleService.EXTRA_HEART_RATE, currentHeartRate)
+            putExtra(HeartRateBleService.EXTRA_HEART_RATE, HeartRateService.currentHeartRate)
         }
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(bleIntent)
         } else {
             startService(bleIntent)
         }
-        
+
         updateBroadcastButton()
-        updateHeartRateDisplay(currentHeartRate, isWearing)
+        updateHeartRateDisplay()
 
         enableBootReceiver()
-        
+
         Toast.makeText(this, R.string.broadcasting, Toast.LENGTH_SHORT).show()
         Log.d(TAG, "startBroadcast: Service started")
     }
 
     private fun stopBroadcast() {
         Log.d(TAG, "stopBroadcast: Stopping services")
-        
+
         val intent = Intent(this, HeartRateBleService::class.java).apply {
             action = HeartRateBleService.ACTION_STOP_BROADCAST
         }
@@ -205,7 +200,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         disableBootReceiver()
 
         updateBroadcastButton()
-        updateHeartRateDisplay(0, false)
+        updateHeartRateDisplay()
         Log.d(TAG, "stopBroadcast: Services stopped")
     }
 
@@ -242,105 +237,15 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         binding.broadcastButton.isEnabled = true
     }
 
-    private fun checkAndRequestPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
-                != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.BODY_SENSORS),
-                    PERMISSION_REQUEST_CODE
-                )
-            } else {
-                setupHeartRateSensor()
-            }
-        } else {
-            setupHeartRateSensor()
-        }
-    }
-
-    private fun setupHeartRateSensor() {
-        Log.d(TAG, "setupHeartRateSensor: Starting")
-        
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        heartRateSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_HEART_RATE)
-        
-        if (heartRateSensor != null) {
-            registerSensorListener()
-        }
-        
-        startWearingCheck()
-    }
-
-    private fun registerSensorListener(): Boolean {
-        if (heartRateSensor == null || sensorManager == null) return false
-        val registered = sensorManager?.registerListener(
-            this, heartRateSensor, SensorManager.SENSOR_DELAY_NORMAL
-        ) ?: false
-        if (registered) {
-            Log.d(TAG, "registerSensorListener: Success")
-        }
-        return registered
-    }
-
-    private fun startWearingCheck() {
-        if (isWearingCheckRunning) return
-        isWearingCheckRunning = true
-        wearingCheckHandler.post(wearingCheckRunnable)
-    }
-
-    private val wearingCheckRunnable = object : Runnable {
-        override fun run() {
-            if (!isWearingCheckRunning) return
-
-            val currentTime = System.currentTimeMillis()
-            val timeSinceLastHeartRate = currentTime - lastHeartRateTime
-
-            if (timeSinceLastHeartRate > 5000 && isWearing) {
-                isWearing = false
-                if (HeartRateBleService.isAdvertising) {
-                    updateHeartRateDisplay(0, false)
-                }
-            }
-
-            wearingCheckHandler.postDelayed(this, 5000)
-        }
-    }
-
-    private fun stopWearingCheck() {
-        isWearingCheckRunning = false
-        wearingCheckHandler.removeCallbacks(wearingCheckRunnable)
-    }
-
-    override fun onSensorChanged(event: SensorEvent?) {
-        event?.let {
-            if (it.sensor.type == Sensor.TYPE_HEART_RATE) {
-                val heartRate = it.values[0].toInt()
-                Log.d(TAG, "onSensorChanged: Heart rate = $heartRate")
-                if (heartRate > 0) {
-                    currentHeartRate = heartRate
-                    isWearing = true
-                    lastHeartRateTime = System.currentTimeMillis()
-
-                    if (HeartRateBleService.isAdvertising) {
-                        updateHeartRateDisplay(heartRate, true)
-                    }
-                }
-            }
-        }
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-
-    private fun updateHeartRateDisplay(heartRate: Int, isWearing: Boolean) {
+    private fun updateHeartRateDisplay() {
         if (!HeartRateBleService.isAdvertising) {
             binding.heartRateText.text = getString(R.string.no_heart_rate)
             binding.heartRateText.setTextColor(ContextCompat.getColor(this, R.color.unit_text))
             return
         }
-        
-        if (isWearing && heartRate > 0) {
-            binding.heartRateText.text = heartRate.toString()
+
+        if (localIsWearing && localHeartRate > 0) {
+            binding.heartRateText.text = localHeartRate.toString()
             binding.heartRateText.setTextColor(ContextCompat.getColor(this, R.color.heart_rate_text))
         } else {
             binding.heartRateText.text = getString(R.string.no_heart_rate)
@@ -351,27 +256,43 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "onResume")
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
-            == PackageManager.PERMISSION_GRANTED) {
-            registerSensorListener()
-        }
         updateBroadcastButton()
-        updateHeartRateDisplay(currentHeartRate, isWearing)
+        updateHeartRateDisplay()
 
-        val filter = IntentFilter(HeartRateBleService.ACTION_ADVERTISING_STATE_CHANGED)
+        // 注册广播状态接收器
+        val advFilter = IntentFilter(HeartRateBleService.ACTION_ADVERTISING_STATE_CHANGED)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(advertisingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(advertisingReceiver, advFilter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            registerReceiver(advertisingReceiver, filter)
+            registerReceiver(advertisingReceiver, advFilter)
         }
+
+        // 注册心率数据接收器
+        val hrFilter = IntentFilter(HeartRateService.ACTION_HEART_RATE_UPDATED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(heartRateReceiver, hrFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(heartRateReceiver, hrFilter)
+        }
+
+        // 从 HeartRateService 读取最新心率（Receiver 可能在上次 onPause 后发送过数据）
+        localHeartRate = HeartRateService.currentHeartRate
+        updateHeartRateDisplay()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.d(TAG, "onPause: unregistering receivers")
+        try {
+            unregisterReceiver(advertisingReceiver)
+        } catch (_: Exception) {}
+        try {
+            unregisterReceiver(heartRateReceiver)
+        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        stopWearingCheck()
-        sensorManager?.unregisterListener(this)
-        try {
-            unregisterReceiver(advertisingReceiver)
-        } catch (_: Exception) {}
+        Log.d(TAG, "onDestroy")
     }
 }
