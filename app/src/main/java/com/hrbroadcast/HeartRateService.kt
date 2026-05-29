@@ -156,20 +156,22 @@ class HeartRateService : LifecycleService(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun startWearingCheck() {
-        handler.post(object : Runnable {
-            override fun run() {
-                if (!isRunning) return
-                val timeSinceLastHeartRate = System.currentTimeMillis() - lastHeartRateTime
-                if (timeSinceLastHeartRate > 5000 && lastHeartRateTime > 0) {
-                    if (HeartRateBleService.isAdvertising && !hasBroadcastZeroHeartRate) {
-                        HeartRateBleService.updateHeartRate(0)
-                        hasBroadcastZeroHeartRate = true
-                        Log.d(TAG, "Wearing check: broadcasting heart rate 0")
-                    }
+        handler.post(wearingCheckRunnable)
+    }
+
+    private val wearingCheckRunnable = object : Runnable {
+        override fun run() {
+            if (!isRunning) return
+            val timeSinceLastHeartRate = System.currentTimeMillis() - lastHeartRateTime
+            if (timeSinceLastHeartRate > 5000 && lastHeartRateTime > 0) {
+                if (HeartRateBleService.isAdvertising && !hasBroadcastZeroHeartRate) {
+                    HeartRateBleService.updateHeartRate(0)
+                    hasBroadcastZeroHeartRate = true
+                    Log.d(TAG, "Wearing check: broadcasting heart rate 0")
                 }
-                handler.postDelayed(this, 5000)
             }
-        })
+            handler.postDelayed(this, 5000)
+        }
     }
 
     private fun setupScreenReceiver() {
@@ -226,7 +228,7 @@ class HeartRateService : LifecycleService(), SensorEventListener {
         super.onDestroy()
         Log.d(TAG, "onDestroy")
         isRunning = false
-        handler.removeCallbacksAndMessages(null)
+        handler.removeCallbacks(wearingCheckRunnable)
         unregisterSensor()
         releaseWakeLock()
         screenReceiver?.let { unregisterReceiver(it) }
