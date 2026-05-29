@@ -6,7 +6,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -61,6 +60,14 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         Log.d(TAG, "onCreate: Activity created")
         setupBroadcastButton()
+        setupSettingsButton()
+    }
+
+    private fun setupSettingsButton() {
+        binding.settingsButton.setOnClickListener {
+            Log.d(TAG, "Settings button clicked")
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
     }
 
     private fun setupBroadcastButton() {
@@ -181,8 +188,6 @@ class MainActivity : AppCompatActivity() {
         updateBroadcastButton()
         updateHeartRateDisplay()
 
-        enableBootReceiver()
-
         Toast.makeText(this, R.string.broadcasting, Toast.LENGTH_SHORT).show()
         Log.d(TAG, "startBroadcast: Service started")
     }
@@ -197,31 +202,9 @@ class MainActivity : AppCompatActivity() {
 
         stopService(Intent(this, HeartRateService::class.java))
 
-        disableBootReceiver()
-
         updateBroadcastButton()
         updateHeartRateDisplay()
         Log.d(TAG, "stopBroadcast: Services stopped")
-    }
-
-    private fun enableBootReceiver() {
-        val component = android.content.ComponentName(this, BootReceiver::class.java)
-        packageManager.setComponentEnabledSetting(
-            component,
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-            PackageManager.DONT_KILL_APP
-        )
-        Log.d(TAG, "BootReceiver enabled")
-    }
-
-    private fun disableBootReceiver() {
-        val component = android.content.ComponentName(this, BootReceiver::class.java)
-        packageManager.setComponentEnabledSetting(
-            component,
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.DONT_KILL_APP
-        )
-        Log.d(TAG, "BootReceiver disabled")
     }
 
     private fun updateBroadcastButton() {

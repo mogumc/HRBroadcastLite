@@ -10,4 +10,8 @@
     <string name="broadcasting">正在广播...</string>
     <string name="ble_not_supported">设备不支持BLE</string>
     <string name="permission_required">需要权限</string>
+    <string name="settings_title">设置</string>
+    <string name="auto_start_label">开机自启动</string>
+    <string name="auto_start_hint">开启后，手表重启将自动恢复心率广播（需系统支持）</string>
+    <string name="settings">设置</string>
 </resources>
