@@ -58,11 +58,6 @@
             </intent-filter>
         </receiver>
 
-        <receiver
-            android:name=".ScreenReceiver"
-            android:enabled="true"
-            android:exported="false" />
-
     </application>
 
 </manifest>

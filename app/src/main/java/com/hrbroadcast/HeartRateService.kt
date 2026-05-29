@@ -39,7 +39,6 @@ class HeartRateService : LifecycleService(), SensorEventListener {
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
-    private var screenReceiver: ScreenReceiver? = null
     private var connectionReceiver: BroadcastReceiver? = null
     private var sensorManager: SensorManager? = null
     private var sensorRegistered = false
@@ -55,7 +54,6 @@ class HeartRateService : LifecycleService(), SensorEventListener {
         startForeground(NOTIFICATION_ID, createNotification())
         initWakeLock()
         registerSensorIfNeeded()
-        setupScreenReceiver()
         setupConnectionReceiver()
         startWearingCheck()
     }
@@ -188,15 +186,6 @@ class HeartRateService : LifecycleService(), SensorEventListener {
         }
     }
 
-    private fun setupScreenReceiver() {
-        screenReceiver = ScreenReceiver()
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_SCREEN_ON)
-            addAction(Intent.ACTION_SCREEN_OFF)
-        }
-        registerReceiver(screenReceiver, filter)
-    }
-
     private fun createNotification(): Notification {
         createNotificationChannel()
 
@@ -245,7 +234,6 @@ class HeartRateService : LifecycleService(), SensorEventListener {
         handler.removeCallbacks(wearingCheckRunnable)
         unregisterSensor()
         releaseWakeLock()
-        screenReceiver?.let { unregisterReceiver(it) }
         connectionReceiver?.let { unregisterReceiver(it) }
     }
 
