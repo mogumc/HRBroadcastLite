@@ -54,6 +54,7 @@ class HeartRateService : LifecycleService(), SensorEventListener {
         isRunning = true
         startForeground(NOTIFICATION_ID, createNotification())
         initWakeLock()
+        registerSensorIfNeeded()
         setupScreenReceiver()
         setupConnectionReceiver()
         startWearingCheck()
@@ -99,10 +100,8 @@ class HeartRateService : LifecycleService(), SensorEventListener {
                 Log.d(TAG, "Connection state changed: count=$count")
                 if (count > 0) {
                     acquireWakeLock()
-                    registerSensorIfNeeded()
                 } else {
                     releaseWakeLock()
-                    unregisterSensor()
                 }
             }
         }
