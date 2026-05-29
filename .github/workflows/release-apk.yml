@@ -50,7 +50,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: HeartWith ${{ steps.version.outputs.name }}
+          name: HRBroadcastLite ${{ steps.version.outputs.name }}
           files: |
             app/build/outputs/apk/release/HRBroadcastLite-*.apk
           generate_release_notes: true
