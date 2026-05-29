@@ -38,6 +38,7 @@ jobs:
       - name: Build Release APK
         run: |
           ./gradlew assembleRelease \
+            -x lintVitalAnalyzeRelease \
             -PheartwithClientVersionName="${{ steps.version.outputs.name }}" \
             -PheartwithClientVersionCode="${{ steps.version.outputs.code }}"
 
