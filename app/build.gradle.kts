@@ -48,3 +48,15 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("com.google.android.material:material:1.12.0")
 }
+
+afterEvaluate {
+    tasks.named("assembleRelease") {
+        doLast {
+            val releaseDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+            val source = releaseDir.resolve("app-release.apk")
+            val versionName = rootProject.findProperty("heartwithClientVersionName") ?: android.defaultConfig.versionName
+            val target = releaseDir.resolve("HRBroadcastLite-$versionName-release.apk")
+            if (source.exists()) source.copyTo(target, overwrite = true)
+        }
+    }
+}
