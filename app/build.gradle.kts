@@ -1,3 +1,6 @@
+val HRBroadcastLiteVersionCode = (findProperty("HRBroadcastLiteClientVersionCode") as? String)?.toIntOrNull() ?: 1
+val HRBroadcastLiteVersionName = (findProperty("HRBroadcastLiteClientVersionName") as? String) ?: "1.0"
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -11,9 +14,8 @@ android {
         applicationId = "com.hrbroadcast.lite"
         minSdk = 27
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
-
+        versionCode = HRBroadcastLiteVersionCode
+        versionName = HRBroadcastLiteVersionName
     }
 
     buildTypes {
@@ -49,11 +51,13 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
 }
 
-android.applicationVariants.all { variant ->
-    if (variant.name == "release") {
-        variant.outputs.all {
-            val versionName = rootProject.findProperty("heartwithClientVersionName") ?: variant.versionName
-            outputFileName = "HRBroadcastLite-$versionName-release.apk"
+afterEvaluate {
+    tasks.named("assembleRelease") {
+        doLast {
+            val releaseDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+            val source = releaseDir.resolve("app-release.apk")
+            val target = releaseDir.resolve("HRBroadcastLite-$HRBroadcastLiteVersionName-release.apk")
+            if (source.exists()) source.copyTo(target, overwrite = true)
         }
     }
 }
