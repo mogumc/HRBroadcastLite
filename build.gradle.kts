@@ -2,3 +2,14 @@ plugins {
     id("com.android.application") version "8.7.2" apply false
     id("org.jetbrains.kotlin.android") version "2.0.21" apply false
 }
+
+afterEvaluate {
+    tasks.named("assembleRelease") {
+        doLast {
+            val releaseDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+            val source = releaseDir.resolve("app-release.apk")
+            val target = releaseDir.resolve("HRBroadcastLite-$heartwithVersionName-release.apk")
+            if (source.exists()) source.copyTo(target, overwrite = true)
+        }
+    }
+}
