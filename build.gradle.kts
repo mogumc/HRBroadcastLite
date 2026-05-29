@@ -4,11 +4,12 @@ plugins {
 }
 
 afterEvaluate {
+    val versionName = project(":app").extensions.getByType(com.android.build.gradle.AppExtension::class.java).defaultConfig.versionName ?: "unknown"
     tasks.named("assembleRelease") {
         doLast {
             val releaseDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
             val source = releaseDir.resolve("app-release.apk")
-            val target = releaseDir.resolve("HRBroadcastLite-$heartwithVersionName-release.apk")
+            val target = releaseDir.resolve("HRBroadcastLite-$versionName-release.apk")
             if (source.exists()) source.copyTo(target, overwrite = true)
         }
     }
