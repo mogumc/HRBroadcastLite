@@ -24,6 +24,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+        private const val BODY_SENSORS_PERMISSION_REQUEST_CODE = 1001
         private const val BLUETOOTH_PERMISSION_REQUEST_CODE = 1002
     }
 
@@ -62,6 +63,23 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "onCreate: Activity created")
         setupBroadcastButton()
         setupSettingsButton()
+        checkBodySensorsPermission()
+    }
+
+    private fun checkBodySensorsPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
+                != PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "BODY_SENSORS permission not granted, requesting")
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.BODY_SENSORS),
+                    BODY_SENSORS_PERMISSION_REQUEST_CODE
+                )
+            } else {
+                Log.d(TAG, "BODY_SENSORS permission already granted")
+            }
+        }
     }
 
     private fun setupSettingsButton() {
@@ -127,6 +145,13 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "onRequestPermissionsResult: requestCode=$requestCode, grantResults=${grantResults.contentToString()}")
 
         when (requestCode) {
+            BODY_SENSORS_PERMISSION_REQUEST_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Log.d(TAG, "Body sensors permission granted")
+                } else {
+                    Log.w(TAG, "Body sensors permission denied")
+                }
+            }
             BLUETOOTH_PERMISSION_REQUEST_CODE -> {
                 if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
                     Log.d(TAG, "Bluetooth permissions granted")

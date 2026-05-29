@@ -34,6 +34,10 @@ class SettingsActivity : AppCompatActivity() {
         val autoStart = prefs.getBoolean(KEY_AUTO_START, false)
         binding.autoStartSwitch.isChecked = autoStart
 
+        binding.backButton.setOnClickListener {
+            finish()
+        }
+
         binding.autoStartSwitch.setOnCheckedChangeListener { _, isChecked ->
             Log.d(TAG, "autoStartSwitch: isChecked=$isChecked")
             prefs.edit().putBoolean(KEY_AUTO_START, isChecked).apply()
