@@ -35,7 +35,7 @@ jobs:
           IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG"
           echo "code=$(( MAJOR * 1000000 + MINOR * 1000 + PATCH ))" >> "$GITHUB_OUTPUT"
 
-      - name: Build Debug APK
+      - name: Build Release APK
         run: |
           ./gradlew assembleRelease \
             -PheartwithClientVersionName="${{ steps.version.outputs.name }}" \
