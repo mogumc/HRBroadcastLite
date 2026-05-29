@@ -55,9 +55,13 @@ afterEvaluate {
     tasks.named("assembleRelease") {
         doLast {
             val releaseDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
-            val source = releaseDir.resolve("app-release.apk")
-            val target = releaseDir.resolve("HRBroadcastLite-$HRBroadcastLiteVersionName-release.apk")
-            if (source.exists()) source.copyTo(target, overwrite = true)
+            val apk = releaseDir.listFiles()?.find { it.name.endsWith(".apk") && !it.name.contains("HRBroadcastLite") }
+            if (apk != null) {
+                apk.copyTo(
+                    releaseDir.resolve("HRBroadcastLite-$HRBroadcastLiteVersionName-release.apk"),
+                    overwrite = true
+                )
+            }
         }
     }
 }
