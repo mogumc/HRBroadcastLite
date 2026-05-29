@@ -42,30 +42,27 @@ class HeartRateBleService : Service() {
         const val ACTION_START_BROADCAST = "com.hrbroadcast.START_BROADCAST"
         const val ACTION_STOP_BROADCAST = "com.hrbroadcast.STOP_BROADCAST"
         const val ACTION_CONNECTION_STATE_CHANGED = "com.hrbroadcast.CONNECTION_STATE_CHANGED"
-        const val ACTION_AUTO_STOP = "com.hrbroadcast.AUTO_STOP"
         const val EXTRA_HEART_RATE = "heart_rate"
         const val EXTRA_CONNECTION_COUNT = "connection_count"
         
         val HEART_RATE_SERVICE_UUID: UUID = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
         val HEART_RATE_MEASUREMENT_UUID: UUID = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
         val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-        
+
         var isAdvertising = false
             private set
-        
+
         var connectionCount = 0
             private set
 
         private var instance: HeartRateBleService? = null
-        
+
         fun updateHeartRate(heartRate: Int) {
             instance?.let {
                 it.currentHeartRate = heartRate
                 it.notifyHeartRate()
             }
         }
-        
-        private const val AUTO_STOP_DELAY_MS = 180_000L
     }
 
     private var bluetoothManager: BluetoothManager? = null
@@ -78,18 +75,6 @@ class HeartRateBleService : Service() {
     private var gattServerStarted = false
     private val connectedDevices = mutableSetOf<String>()
     private val handler = Handler(Looper.getMainLooper())
-
-    private val autoStopRunnable = Runnable {
-        if (isAdvertising && connectedDevices.isEmpty()) {
-            Log.d(TAG, "Auto stop: No connections for ${AUTO_STOP_DELAY_MS / 1000}s, stopping broadcast")
-            broadcastAutoStop()
-            stopAdvertising()
-            stopGattServer()
-            stopService(Intent(this, HeartRateService::class.java))
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-        }
-    }
 
     override fun onCreate() {
         super.onCreate()
@@ -119,12 +104,10 @@ class HeartRateBleService : Service() {
                 }
                 if (!isAdvertising) {
                     startAdvertising()
-                    startAutoStopTimer()
                 }
             }
             ACTION_STOP_BROADCAST -> {
                 Log.d(TAG, "ACTION_STOP_BROADCAST")
-                stopAutoStopTimer()
                 stopAdvertising()
                 stopGattServer()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -133,24 +116,6 @@ class HeartRateBleService : Service() {
         }
         
         return START_STICKY
-    }
-
-    private fun startAutoStopTimer() {
-        handler.postDelayed(autoStopRunnable, AUTO_STOP_DELAY_MS)
-        Log.d(TAG, "Auto stop timer started: ${AUTO_STOP_DELAY_MS / 1000}s")
-    }
-
-    private fun stopAutoStopTimer() {
-        handler.removeCallbacks(autoStopRunnable)
-        Log.d(TAG, "Auto stop timer stopped")
-    }
-
-    private fun resetAutoStopTimer() {
-        handler.removeCallbacks(autoStopRunnable)
-        if (isAdvertising && connectedDevices.isEmpty()) {
-            handler.postDelayed(autoStopRunnable, AUTO_STOP_DELAY_MS)
-            Log.d(TAG, "Auto stop timer reset: ${AUTO_STOP_DELAY_MS / 1000}s")
-        }
     }
 
     private fun broadcastConnectionState() {
@@ -162,16 +127,6 @@ class HeartRateBleService : Service() {
         sendBroadcast(intent)
         updateNotification()
         Log.d(TAG, "Connection state broadcast: count=$connectionCount")
-    }
-
-    private fun broadcastAutoStop() {
-        isAdvertising = false
-        connectionCount = 0
-        val intent = Intent(ACTION_AUTO_STOP).apply {
-            setPackage(packageName)
-        }
-        sendBroadcast(intent)
-        Log.d(TAG, "Auto stop broadcast sent")
     }
 
     private fun startGattServer() {
@@ -250,15 +205,11 @@ class HeartRateBleService : Service() {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.d(TAG, "Device connected: $deviceAddress")
                 connectedDevices.add(deviceAddress)
-                handler.removeCallbacks(autoStopRunnable)
                 broadcastConnectionState()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.d(TAG, "Device disconnected: $deviceAddress")
                 connectedDevices.remove(deviceAddress)
                 broadcastConnectionState()
-                if (connectedDevices.isEmpty()) {
-                    resetAutoStopTimer()
-                }
             }
         }
         
@@ -493,7 +444,6 @@ class HeartRateBleService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        stopAutoStopTimer()
         stopAdvertising()
         stopGattServer()
         instance = null

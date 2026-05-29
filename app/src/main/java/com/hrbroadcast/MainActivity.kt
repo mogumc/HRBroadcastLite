@@ -2,10 +2,8 @@ package com.hrbroadcast
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -15,7 +13,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.PowerManager
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -28,11 +25,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var binding: ActivityMainBinding
     private var sensorManager: SensorManager? = null
     private var heartRateSensor: Sensor? = null
-    private var wakeLock: PowerManager.WakeLock? = null
     private var currentHeartRate: Int = 0
     private var isWearing: Boolean = false
     private var lastHeartRateTime: Long = 0
-    private var bleStateReceiver: BleStateReceiver? = null
     private val wearingCheckHandler = Handler(Looper.getMainLooper())
     @Volatile private var isWearingCheckRunning = false
 
@@ -50,15 +45,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         setupBroadcastButton()
         checkAndRequestPermissions()
-    }
-
-    private fun setupWakeLock() {
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "HRBroadcast::HeartRateWakeLock"
-        )
-        wakeLock?.acquire(10 * 60 * 1000L)
     }
 
     private fun setupBroadcastButton() {
@@ -168,8 +154,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         
         Log.d(TAG, "startBroadcast: Bluetooth is ready, starting services with heartRate=$currentHeartRate")
         
-        setupWakeLock()
-        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(Intent(this, HeartRateService::class.java))
         } else {
@@ -204,7 +188,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         stopService(Intent(this, HeartRateService::class.java))
 
-        wakeLock?.let { if (it.isHeld) it.release() }
         updateBroadcastButton()
         updateHeartRateDisplay(0, false)
         Log.d(TAG, "stopBroadcast: Services stopped")
@@ -338,58 +321,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
         updateBroadcastButton()
         updateHeartRateDisplay(currentHeartRate, isWearing)
-        registerBleStateReceiver()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        unregisterBleStateReceiver()
-    }
-
-    private fun registerBleStateReceiver() {
-        bleStateReceiver = BleStateReceiver()
-        val filter = IntentFilter().apply {
-            addAction(HeartRateBleService.ACTION_AUTO_STOP)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(bleStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(bleStateReceiver, filter)
-        }
-        Log.d(TAG, "BLE state receiver registered")
-    }
-
-    private fun unregisterBleStateReceiver() {
-        bleStateReceiver?.let {
-            unregisterReceiver(it)
-        }
-        bleStateReceiver = null
-        Log.d(TAG, "BLE state receiver unregistered")
-    }
-
-    inner class BleStateReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                HeartRateBleService.ACTION_AUTO_STOP -> {
-                    Log.d(TAG, "Auto stop received")
-                    stopService(Intent(this@MainActivity, HeartRateService::class.java))
-                    wakeLock?.let { if (it.isHeld) it.release() }
-                    updateBroadcastButton()
-                    updateHeartRateDisplay(0, false)
-                    Toast.makeText(this@MainActivity, "无设备连接，已自动停止广播", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         stopWearingCheck()
         sensorManager?.unregisterListener(this)
-        wakeLock?.let {
-            if (it.isHeld) {
-                it.release()
-            }
-        }
     }
 }

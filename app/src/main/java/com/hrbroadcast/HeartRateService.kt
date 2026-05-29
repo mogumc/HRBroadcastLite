@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -19,9 +20,6 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 class HeartRateService : LifecycleService(), SensorEventListener {
 
@@ -39,7 +37,9 @@ class HeartRateService : LifecycleService(), SensorEventListener {
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var screenReceiver: ScreenReceiver? = null
+    private var connectionReceiver: BroadcastReceiver? = null
     private var sensorManager: SensorManager? = null
+    private var sensorRegistered = false
     private var lastBleUpdateTime: Long = 0
     private var lastHeartRateTime: Long = 0
     private var hasBroadcastZeroHeartRate: Boolean = false
@@ -50,9 +50,9 @@ class HeartRateService : LifecycleService(), SensorEventListener {
         Log.d(TAG, "onCreate")
         isRunning = true
         startForeground(NOTIFICATION_ID, createNotification())
-        setupWakeLock()
+        initWakeLock()
         setupScreenReceiver()
-        setupSensor()
+        setupConnectionReceiver()
         startWearingCheck()
     }
 
@@ -62,13 +62,74 @@ class HeartRateService : LifecycleService(), SensorEventListener {
         return START_STICKY
     }
 
-    private fun setupSensor() {
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private fun initWakeLock() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "HRBroadcast::HeartRateWakeLock"
+        )
+    }
+
+    private fun acquireWakeLock() {
+        wakeLock?.let {
+            if (!it.isHeld) {
+                it.acquire(10 * 60 * 1000L)
+                Log.d(TAG, "WakeLock acquired")
+            }
+        }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let {
+            if (it.isHeld) {
+                it.release()
+                Log.d(TAG, "WakeLock released")
+            }
+        }
+    }
+
+    private fun setupConnectionReceiver() {
+        connectionReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action != HeartRateBleService.ACTION_CONNECTION_STATE_CHANGED) return
+                val count = intent.getIntExtra(HeartRateBleService.EXTRA_CONNECTION_COUNT, 0)
+                Log.d(TAG, "Connection state changed: count=$count")
+                if (count > 0) {
+                    acquireWakeLock()
+                    registerSensorIfNeeded()
+                } else {
+                    releaseWakeLock()
+                    unregisterSensor()
+                }
+            }
+        }
+        val filter = IntentFilter(HeartRateBleService.ACTION_CONNECTION_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(connectionReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(connectionReceiver, filter)
+        }
+    }
+
+    private fun registerSensorIfNeeded() {
+        if (sensorRegistered) return
+        if (sensorManager == null) {
+            sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        }
         val heartRateSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_HEART_RATE)
         heartRateSensor?.let {
             sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+            sensorRegistered = true
             Log.d(TAG, "Sensor listener registered")
         } ?: Log.w(TAG, "No heart rate sensor found")
+    }
+
+    private fun unregisterSensor() {
+        if (!sensorRegistered) return
+        sensorManager?.unregisterListener(this)
+        sensorRegistered = false
+        currentHeartRate = 0
+        Log.d(TAG, "Sensor listener unregistered")
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -109,26 +170,6 @@ class HeartRateService : LifecycleService(), SensorEventListener {
                 handler.postDelayed(this, 5000)
             }
         })
-    }
-
-    private fun setupWakeLock() {
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "HRBroadcast::HeartRateWakeLock"
-        )
-        wakeLock?.acquire(10 * 60 * 1000L)
-
-        lifecycleScope.launch {
-            while (isRunning) {
-                delay(9 * 60 * 1000)
-                wakeLock?.let {
-                    if (!it.isHeld) {
-                        it.acquire(10 * 60 * 1000L)
-                    }
-                }
-            }
-        }
     }
 
     private fun setupScreenReceiver() {
@@ -186,15 +227,10 @@ class HeartRateService : LifecycleService(), SensorEventListener {
         Log.d(TAG, "onDestroy")
         isRunning = false
         handler.removeCallbacksAndMessages(null)
-        sensorManager?.unregisterListener(this)
-        wakeLock?.let {
-            if (it.isHeld) {
-                it.release()
-            }
-        }
-        screenReceiver?.let {
-            unregisterReceiver(it)
-        }
+        unregisterSensor()
+        releaseWakeLock()
+        screenReceiver?.let { unregisterReceiver(it) }
+        connectionReceiver?.let { unregisterReceiver(it) }
     }
 
     override fun onBind(intent: Intent): IBinder? {
