@@ -1,6 +1,21 @@
 val HRBroadcastLiteVersionCode = (findProperty("HRBroadcastLiteClientVersionCode") as? String)?.toIntOrNull() ?: 1
 val HRBroadcastLiteVersionName = (findProperty("HRBroadcastLiteClientVersionName") as? String) ?: "1.0"
 
+val debugKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
+if (!debugKeystore.exists()) {
+    debugKeystore.parentFile.mkdirs()
+    ProcessBuilder(
+        "keytool", "-genkey", "-v", "-keystore", debugKeystore.absolutePath,
+        "-alias", "androiddebugkey",
+        "-storepass", "android",
+        "-keypass", "android",
+        "-keyalg", "RSA",
+        "-keysize", "2048",
+        "-validity", "10000",
+        "-dname", "CN=Android Debug,O=Android,C=US"
+    ).inheritIO().start().waitFor()
+}
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -18,8 +33,18 @@ android {
         versionName = HRBroadcastLiteVersionName
     }
 
+    signingConfigs {
+        getByName("debug") {
+            storeFile = debugKeystore
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
