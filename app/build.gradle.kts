@@ -49,14 +49,11 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
 }
 
-afterEvaluate {
-    tasks.named("assembleRelease") {
-        doLast {
-            val releaseDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
-            val source = releaseDir.resolve("app-release.apk")
-            val versionName = rootProject.findProperty("heartwithClientVersionName") ?: android.defaultConfig.versionName
-            val target = releaseDir.resolve("HRBroadcastLite-$versionName-release.apk")
-            if (source.exists()) source.copyTo(target, overwrite = true)
+android.applicationVariants.all { variant ->
+    if (variant.name == "release") {
+        variant.outputs.all {
+            val versionName = rootProject.findProperty("heartwithClientVersionName") ?: variant.versionName
+            outputFileName = "HRBroadcastLite-$versionName-release.apk"
         }
     }
 }
