@@ -8,6 +8,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.Manifest
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -19,6 +21,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 
 class HeartRateService : LifecycleService(), SensorEventListener {
@@ -117,11 +120,19 @@ class HeartRateService : LifecycleService(), SensorEventListener {
             sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         }
         val heartRateSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_HEART_RATE)
-        heartRateSensor?.let {
-            sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
-            sensorRegistered = true
-            Log.d(TAG, "Sensor listener registered")
-        } ?: Log.w(TAG, "No heart rate sensor found")
+        if (heartRateSensor == null) {
+            Log.w(TAG, "No heart rate sensor found")
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
+            != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "BODY_SENSORS permission not granted, cannot register sensor")
+            return
+        }
+        sensorManager?.registerListener(this, heartRateSensor, SensorManager.SENSOR_DELAY_NORMAL)
+        sensorRegistered = true
+        Log.d(TAG, "Sensor listener registered")
     }
 
     private fun unregisterSensor() {
@@ -133,25 +144,24 @@ class HeartRateService : LifecycleService(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        event?.let {
-            if (it.sensor.type == Sensor.TYPE_HEART_RATE) {
-                val heartRate = it.values[0].toInt()
-                if (heartRate > 0) {
-                    currentHeartRate = heartRate
-                    hasBroadcastZeroHeartRate = false
-                    lastHeartRateTime = System.currentTimeMillis()
-                    broadcastHeartRate(heartRate, true)
+        if (event == null) return
+        if (event.sensor.type != Sensor.TYPE_HEART_RATE) return
 
-                    if (HeartRateBleService.isAdvertising) {
-                        val now = System.currentTimeMillis()
-                        if (now - lastBleUpdateTime >= BLE_UPDATE_INTERVAL_MS) {
-                            lastBleUpdateTime = now
-                            HeartRateBleService.updateHeartRate(heartRate)
-                        }
-                    }
-                }
-            }
-        }
+        val heartRate = event.values[0].toInt()
+        if (heartRate <= 0) return
+
+        currentHeartRate = heartRate
+        hasBroadcastZeroHeartRate = false
+        lastHeartRateTime = System.currentTimeMillis()
+        broadcastHeartRate(heartRate, isWearing = true)
+
+        if (!HeartRateBleService.isAdvertising) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastBleUpdateTime < BLE_UPDATE_INTERVAL_MS) return
+
+        lastBleUpdateTime = now
+        HeartRateBleService.updateHeartRate(heartRate)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

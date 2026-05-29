@@ -150,6 +150,7 @@ class MainActivity : AppCompatActivity() {
                     Log.d(TAG, "Body sensors permission granted")
                 } else {
                     Log.w(TAG, "Body sensors permission denied")
+                    Toast.makeText(this, "需要身体传感器权限才能读取心率", Toast.LENGTH_LONG).show()
                 }
             }
             BLUETOOTH_PERMISSION_REQUEST_CODE -> {
