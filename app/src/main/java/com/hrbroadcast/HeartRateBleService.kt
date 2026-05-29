@@ -42,6 +42,8 @@ class HeartRateBleService : Service() {
         const val ACTION_START_BROADCAST = "com.hrbroadcast.START_BROADCAST"
         const val ACTION_STOP_BROADCAST = "com.hrbroadcast.STOP_BROADCAST"
         const val ACTION_CONNECTION_STATE_CHANGED = "com.hrbroadcast.CONNECTION_STATE_CHANGED"
+        const val ACTION_ADVERTISING_STATE_CHANGED = "com.hrbroadcast.ADVERTISING_STATE_CHANGED"
+        const val EXTRA_IS_ADVERTISING = "is_advertising"
         const val EXTRA_HEART_RATE = "heart_rate"
         const val EXTRA_CONNECTION_COUNT = "connection_count"
         
@@ -127,6 +129,15 @@ class HeartRateBleService : Service() {
         sendBroadcast(intent)
         updateNotification()
         Log.d(TAG, "Connection state broadcast: count=$connectionCount")
+    }
+
+    private fun broadcastAdvertisingState() {
+        val intent = Intent(ACTION_ADVERTISING_STATE_CHANGED).apply {
+            putExtra(EXTRA_IS_ADVERTISING, isAdvertising)
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
+        Log.d(TAG, "Advertising state broadcast: isAdvertising=$isAdvertising")
     }
 
     private fun startGattServer() {
@@ -331,12 +342,14 @@ class HeartRateBleService : Service() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
                 Log.d(TAG, "startAdvertising: SUCCESS - Advertising Heart Rate Service (UUID: 0x180D)")
                 isAdvertising = true
+                broadcastAdvertisingState()
                 updateNotification()
             }
             
             override fun onStartFailure(errorCode: Int) {
                 Log.e(TAG, "startAdvertising: FAILED - error code: $errorCode")
                 isAdvertising = false
+                broadcastAdvertisingState()
             }
         }
         
@@ -363,6 +376,7 @@ class HeartRateBleService : Service() {
         
         isAdvertising = false
         advertiseCallback = null
+        broadcastAdvertisingState()
         Log.d(TAG, "stopAdvertising: Advertising stopped")
     }
 

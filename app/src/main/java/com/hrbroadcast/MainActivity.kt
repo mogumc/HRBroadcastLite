@@ -2,8 +2,10 @@ package com.hrbroadcast
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -30,6 +32,16 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var lastHeartRateTime: Long = 0
     private val wearingCheckHandler = Handler(Looper.getMainLooper())
     @Volatile private var isWearingCheckRunning = false
+
+    private val advertisingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == HeartRateBleService.ACTION_ADVERTISING_STATE_CHANGED) {
+                val isAdvertising = intent.getBooleanExtra(HeartRateBleService.EXTRA_IS_ADVERTISING, false)
+                Log.d(TAG, "advertisingReceiver: isAdvertising=$isAdvertising")
+                updateBroadcastButton()
+            }
+        }
+    }
 
     companion object {
         private const val TAG = "MainActivity"
@@ -173,6 +185,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         
         updateBroadcastButton()
         updateHeartRateDisplay(currentHeartRate, isWearing)
+
+        enableBootReceiver()
         
         Toast.makeText(this, R.string.broadcasting, Toast.LENGTH_SHORT).show()
         Log.d(TAG, "startBroadcast: Service started")
@@ -188,9 +202,31 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         stopService(Intent(this, HeartRateService::class.java))
 
+        disableBootReceiver()
+
         updateBroadcastButton()
         updateHeartRateDisplay(0, false)
         Log.d(TAG, "stopBroadcast: Services stopped")
+    }
+
+    private fun enableBootReceiver() {
+        val component = android.content.ComponentName(this, BootReceiver::class.java)
+        packageManager.setComponentEnabledSetting(
+            component,
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP
+        )
+        Log.d(TAG, "BootReceiver enabled")
+    }
+
+    private fun disableBootReceiver() {
+        val component = android.content.ComponentName(this, BootReceiver::class.java)
+        packageManager.setComponentEnabledSetting(
+            component,
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP
+        )
+        Log.d(TAG, "BootReceiver disabled")
     }
 
     private fun updateBroadcastButton() {
@@ -321,11 +357,21 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
         updateBroadcastButton()
         updateHeartRateDisplay(currentHeartRate, isWearing)
+
+        val filter = IntentFilter(HeartRateBleService.ACTION_ADVERTISING_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(advertisingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(advertisingReceiver, filter)
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         stopWearingCheck()
         sensorManager?.unregisterListener(this)
+        try {
+            unregisterReceiver(advertisingReceiver)
+        } catch (_: Exception) {}
     }
 }

@@ -10,11 +10,21 @@ class BootReceiver : BroadcastReceiver() {
         if (intent?.action == Intent.ACTION_BOOT_COMPLETED ||
             intent?.action == "android.intent.action.QUICKBOOT_POWERON") {
             context?.let {
-                val serviceIntent = Intent(it, HeartRateService::class.java)
+                val hrIntent = Intent(it, HeartRateService::class.java)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    it.startForegroundService(serviceIntent)
+                    it.startForegroundService(hrIntent)
                 } else {
-                    it.startService(serviceIntent)
+                    it.startService(hrIntent)
+                }
+
+                val bleIntent = Intent(it, HeartRateBleService::class.java).apply {
+                    action = HeartRateBleService.ACTION_START_BROADCAST
+                    putExtra(HeartRateBleService.EXTRA_HEART_RATE, 0)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    it.startForegroundService(bleIntent)
+                } else {
+                    it.startService(bleIntent)
                 }
             }
         }
